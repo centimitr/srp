@@ -16,43 +16,16 @@ func check(err error, prompts ...string) bool {
 func main() {
 	new(App).
 		Action("proxy :public :tunnel", proxy).
-		Action("server :tunnel", server).
+		Action("server :proxy", server).
 		Run()
 }
 
 func proxy(c *Context) {
-	p := c.Get("public")
-	t := c.Get("tunnel")
-	fmt.Println("Listen:", p)
+	p := NewProxy(c.GetInt("public"), c.GetInt("tunnel"))
+	p.Start()
 }
 
 func server(c *Context) {
+	s := NewServer("proxy")
+	s.Connect()
 }
-
-//func proxy(c *Context) {
-//	fmt.Println("==", "waiting for registration...")
-//	var u *url.URL
-//	var rp *httputil.ReverseProxy
-//	var l sync.Mutex
-//
-//	fmt.Println(2)
-//	r := gin.New()
-//	r.GET("/rp", func(c *gin.Context) {
-//		addr := c.Query("addr")
-//		u, err := url.Parse(addr)
-//		check(err, "addr")
-//
-//		l.Lock()
-//		fmt.Println("=>", addr)
-//		rp = httputil.NewSingleHostReverseProxy(u)
-//		c.String(http.StatusOK, "=>"+addr)
-//		l.Unlock()
-//	})
-//	r.NoRoute(func(c *gin.Context) {
-//		fmt.Println(u)
-//		if rp != nil {
-//			rp.ServeHTTP(c.Writer, c.Request)
-//		}
-//	})
-//	check(r.Run(c.Get("addr")))
-//}

@@ -4,61 +4,71 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 )
 
 type Proxy struct {
-	PublicPort int
-	TunnelPort int
+	PublicAddr string
+	TunnelAddr string
 	Tunnel     net.Conn
 }
 
-func NewProxy(publicPort, tunnelPort int) *Proxy {
-	return &Proxy{PublicPort: publicPort, TunnelPort: tunnelPort}
+func NewProxy(publicAddr, tunnelAddr string) *Proxy {
+	return &Proxy{PublicAddr: publicAddr, TunnelAddr: tunnelAddr}
 }
 
-func listen(addr string) net.Listener {
-	l, err := net.Listen("tcp", addr)
-	check(err, "proxy.listen.start")
-	return l
+func copyTCPBuf(from net.Conn, to net.Conn, wg *sync.WaitGroup) {
+	_, err := io.Copy(from, to)
+	check(err)
+	wg.Done()
 }
 
 func (p *Proxy) forward(from net.Conn, to net.Conn) {
+	ip := strings.Split(p.Tunnel.RemoteAddr().String(), ":")[0]
+	tunnel, err := net.Dial("tcp", ip+":3001")
+	check(err)
+	//p.Tunnel = tunnel
+
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() {
-		_, _ = io.Copy(from, to)
-		wg.Done()
-	}()
-	go func() {
-		_, _ = io.Copy(from, to)
-		wg.Done()
-	}()
+	fmt.Println("COPYING")
+	go copyTCPBuf(tunnel, from, &wg)
+	go copyTCPBuf(from, tunnel, &wg)
 	wg.Wait()
+	fmt.Println("DONE")
 }
 
-func (p *Proxy) Start() {
+func (p *Proxy) Start() (err error) {
 	go func() {
-		l := listen(fmt.Sprintf(":%d", p.PublicPort))
+		fmt.Println("Listen:", p.PublicAddr)
+		l, err := net.Listen("tcp", p.PublicAddr)
+		if check(err, "proxy.listen.start") {
+			return
+		}
 		for {
 			conn, err := l.Accept()
 			check(err, "proxy.listen.accept")
 			go p.forward(conn, p.Tunnel)
 		}
 	}()
-	go func() {
-		l := listen(fmt.Sprintf(":%d", p.Tunnel))
-		for {
-			conn, err := l.Accept()
-			if !check(err, "proxy.listen.accept") {
-				if p.Tunnel != nil {
-					_ = p.Tunnel.Close()
-				}
-				p.Tunnel = conn
-			}
-			if conn, ok := conn.(*net.TCPConn); ok {
-				check(conn.SetKeepAlive(true))
-			}
+	l, err := net.Listen("tcp", p.TunnelAddr)
+	if check(err, "proxy.listen.start") {
+		return
+	}
+	fmt.Println("Tunnel:", p.TunnelAddr)
+	for {
+		conn, err := l.Accept()
+		if check(err, "proxy.listen.accept") {
+			break
 		}
-	}()
+		if p.Tunnel != nil {
+			_ = p.Tunnel.Close()
+		}
+		if conn, ok := conn.(*net.TCPConn); ok {
+			check(conn.SetKeepAlive(true))
+		}
+		p.Tunnel = conn
+	}
+	return
 }

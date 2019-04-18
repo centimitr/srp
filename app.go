@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"net/http"
 	"strings"
 )
 
@@ -21,11 +23,19 @@ func main() {
 }
 
 func proxy(c *Context) {
-	p := NewProxy(c.GetInt("public"), c.GetInt("tunnel"))
-	p.Start()
+	p := NewProxy(c.Get("public"), c.Get("tunnel"))
+	check(p.Start())
 }
 
 func server(c *Context) {
-	s := NewServer("proxy")
-	s.Connect()
+	s := NewServer(c.Get("proxy"))
+	check(s.Connect(), "connect")
+
+	r := gin.New()
+	r.GET("", func(c *gin.Context) {
+		c.String(http.StatusOK, "hello"+c.Query("x"))
+		fmt.Println("hahahah")
+	})
+	check(http.Serve(s.Listener, r))
+	//check(r.Run(s.Conn.LocalAddr().String()), "listen")
 }

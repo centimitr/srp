@@ -18,7 +18,7 @@ func check(err error, prompts ...string) bool {
 func main() {
 	new(App).
 		Action("proxy :public :tunnel", proxy).
-		Action("server :proxy", server).
+		Action("server :tunnel :service", server).
 		Run()
 }
 
@@ -28,7 +28,7 @@ func proxy(c *Context) {
 }
 
 func server(c *Context) {
-	s := NewServer(c.Get("proxy"))
+	s := NewServer(c.Get("tunnel"), c.Get("service"))
 	check(s.Connect(), "connect")
 
 	r := gin.New()

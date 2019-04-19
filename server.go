@@ -7,25 +7,26 @@ import (
 )
 
 type Server struct {
-	ProxyAddr  string
-	PublicAddr string
-	Tunnel     net.Conn
-	Conn       net.Conn
+	ProxyAddr   string
+	ServiceAddr string
+	Tunnel      net.Conn
+	Conn        net.Conn
 }
 
-func NewServer(addr string) *Server {
-	return &Server{ProxyAddr: addr}
+func NewServer(proxyAddr, serviceAddr string) *Server {
+	return &Server{ProxyAddr: proxyAddr, ServiceAddr: serviceAddr}
 }
 
 func (s *Server) call(msg string) (err error) {
 	if s.Conn == nil {
-		s.Conn, err = net.Dial("tcp", s.PublicAddr)
+		s.Conn, err = DialTCPKeepAlive(s.ServiceAddr)
 		if check(err) {
 			return
 		}
 	}
 	_, err = fmt.Fprintln(s.Conn, msg)
 	check(err)
+	return
 }
 
 func (s *Server) handleTunnelMessages() {
@@ -41,8 +42,8 @@ func (s *Server) handleTunnelMessages() {
 }
 
 func (s *Server) Connect() (err error) {
-	s.Tunnel, err = net.Dial("tcp", s.ProxyAddr)
-	if check(err, "server.connect") {
+	s.Tunnel, err = DialTCPKeepAlive(s.ProxyAddr)
+	if check(err, "tunnel.connect") {
 		return
 	}
 	go s.handleTunnelMessages()

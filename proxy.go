@@ -38,23 +38,23 @@ func (p *Proxy) Start() (err error) {
 	go func() {
 		fmt.Println("Listen:", p.PublicAddr)
 		l, err := net.Listen("tcp", p.PublicAddr)
-		if check(err, "proxy.listen.start") {
+		if check(err, "tunnel.listen.start") {
 			return
 		}
 		for {
 			conn, err := l.Accept()
-			check(err, "proxy.listen.accept")
+			check(err, "tunnel.listen.accept")
 			go p.forward(conn, p.Tunnel)
 		}
 	}()
 	l, err := net.Listen("tcp", p.TunnelAddr)
-	if check(err, "proxy.listen.start") {
+	if check(err, "tunnel.listen.start") {
 		return
 	}
 	fmt.Println("Tunnel:", p.TunnelAddr)
 	for {
 		conn, err := l.Accept()
-		if check(err, "proxy.listen.accept") {
+		if check(err, "tunnel.listen.accept") {
 			break
 		}
 		if conn, ok := conn.(*net.TCPConn); ok {

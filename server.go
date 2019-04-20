@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"net"
+	"sync"
 )
 
 type Server struct {
@@ -11,6 +11,7 @@ type Server struct {
 	ServiceAddr string
 	Tunnel      net.Conn
 	Conn        net.Conn
+	Listener    net.Listener
 }
 
 func NewServer(proxyAddr, serviceAddr string) *Server {
@@ -18,32 +19,44 @@ func NewServer(proxyAddr, serviceAddr string) *Server {
 }
 
 func (s *Server) call(msg string) (err error) {
-	if s.Conn == nil {
-		s.Conn, err = DialTCPKeepAlive(s.ServiceAddr)
-		if check(err) {
-			return
-		}
-	}
-	_, err = fmt.Fprintln(s.Conn, msg)
+	fmt.Println("CALL:", msg)
+	s.Conn, err = DialTCPKeepAlive(s.ServiceAddr)
 	check(err)
+	_, err = fmt.Fprintln(s.Conn, msg)
+	return
+}
+
+func (s *Server) CreateService() (err error) {
+	s.Listener, err = net.Listen("tcp", s.ServiceAddr)
+	if err != nil {
+		return
+	}
+	s.Conn, err = DialTCPKeepAlive(s.ServiceAddr)
 	return
 }
 
 func (s *Server) handleTunnelMessages() {
-	for {
-		msg, err := bufio.NewReader(s.Tunnel).ReadString('\n')
-		if check(err) {
-			break
-		}
-		err = s.call(msg)
-		check(err)
-	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go copyTCPBuf(s.Tunnel, s.Conn, &wg)
+	go copyTCPBuf(s.Conn, s.Tunnel, &wg)
+	wg.Wait()
+
+	//for {
+	//	//_, _ = io.Copy(s.Conn, s.Tunnel)
+	//	msg, err := bufio.NewReader(s.Tunnel).ReadString('\n')
+	//	if check(err) {
+	//		break
+	//	}
+	//	err = s.call(msg)
+	//	check(err, "call")
+	//}
 	// may need to detect if handling stops
 }
 
-func (s *Server) Connect() (err error) {
+func (s *Server) ConnectTunnel() (err error) {
 	s.Tunnel, err = DialTCPKeepAlive(s.ProxyAddr)
-	if check(err, "tunnel.connect") {
+	if err != nil {
 		return
 	}
 	go s.handleTunnelMessages()

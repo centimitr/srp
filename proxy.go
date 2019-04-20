@@ -20,8 +20,8 @@ func NewProxy(publicAddr, tunnelAddr string) *Proxy {
 func copyTCPBuf(from net.Conn, to net.Conn, wg *sync.WaitGroup) {
 	_, err := io.Copy(from, to)
 	check(err)
-	//err = from.Close()
-	//check(err)
+	err = from.Close()
+	check(err)
 	wg.Done()
 }
 

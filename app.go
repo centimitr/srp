@@ -28,14 +28,18 @@ func proxy(c *Context) {
 }
 
 func server(c *Context) {
-	s := NewServer(c.Get("tunnel"), c.Get("service"))
-	check(s.Connect(), "connect")
+	tunnelAddr := c.Get("tunnel")
+	serviceAddr := c.Get("service")
+
+	s := NewServer(tunnelAddr, serviceAddr)
+	check(s.CreateService(), "connect.service")
+	check(s.ConnectTunnel(), "connect.tunnel")
 
 	r := gin.New()
 	r.GET("", func(c *gin.Context) {
-		c.String(http.StatusOK, "hello"+c.Query("x"))
-		fmt.Println("hahahah")
+		data := c.Query("x")
+		c.String(http.StatusOK, data)
+		fmt.Println(data)
 	})
 	check(http.Serve(s.Listener, r))
-	//check(r.Run(s.Conn.LocalAddr().String()), "listen")
 }

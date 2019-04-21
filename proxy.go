@@ -1,12 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"io"
 	"net"
-	"sync"
 )
 
 type Proxy struct {
@@ -19,75 +16,49 @@ func NewProxy(publicAddr, tunnelAddr string) *Proxy {
 	return &Proxy{PublicAddr: publicAddr, TunnelAddr: tunnelAddr}
 }
 
-func copyTCPBuf(from net.Conn, to net.Conn, wg *sync.WaitGroup) {
-	_, err := io.Copy(from, to)
-	check(err)
-	err = from.Close()
-	check(err)
-	wg.Done()
-}
-
-//func (p *Proxy) forward2(from net.Conn, to net.Conn) {
-//	var wg sync.WaitGroup
-//	wg.Add(2)
-//	go copyTCPBuf(to, from, &wg)
-//	go copyTCPBuf(from, to, &wg)
-//	wg.Wait()
-//	fmt.Println("DONE")
-//}
-
 func (p *Proxy) forwardMessages(client net.Conn) {
+	var req, resp []byte
 	for {
-		log(0)
-		req, err := ReadHTTPMessage(client)
-		if check(err) {
-			break
+		req, _ = ReadHTTPMessage(client)
+		if p.Tunnel != nil {
+			_ = p.Tunnel.WriteMessage(websocket.TextMessage, req)
+			_, resp, _ = p.Tunnel.ReadMessage()
 		}
-		log(1)
-		log(1, string(req))
-		err = p.Tunnel.WriteMessage(websocket.TextMessage, req)
-		if check(err) {
-			break
-		}
-		log(2)
-		_, resp, err := p.Tunnel.ReadMessage()
-		if check(err) {
-			break
-		}
-		log(3)
-		log(3, string(resp))
-		//_, err = fmt.Fprint(client, resp)
-		_, err = client.Write(resp)
-		if check(err) {
-			break
-		}
-		log(4)
+		_, _ = client.Write(resp)
 	}
-	return
 }
 
-func (p *Proxy) Start() (err error) {
-	go func() {
-		fmt.Println("Listen:", p.PublicAddr)
-		l, err := net.Listen("tcp", p.PublicAddr)
-		if check(err, "tunnel.listen.start") {
-			return
-		}
-		for {
-			conn, err := l.Accept()
-			check(err, "tunnel.listen.accept")
+func (p *Proxy) ListenPublic() (err error) {
+	log("listen:", p.PublicAddr)
+	l, err := net.Listen("tcp", p.PublicAddr)
+	if check(err, "public") {
+		return
+	}
+	for {
+		conn, err := l.Accept()
+		if !check(err, "public") {
 			go p.forwardMessages(conn)
 		}
-	}()
+	}
+}
 
+func (p *Proxy) ListenTunnel() (err error) {
 	upgrader := websocket.Upgrader{}
 	r := gin.New()
 	r.NoRoute(func(c *gin.Context) {
 		p.Tunnel, err = upgrader.Upgrade(c.Writer, c.Request, nil)
-		check(err, "upgrade")
-		log("connect:", p.Tunnel.RemoteAddr())
+		if !check(err, "upgrade") {
+			log("connect:", p.Tunnel.RemoteAddr())
+		}
 	})
 	err = r.Run(p.TunnelAddr)
-	check(err, "tunnel.service")
+	check(err, "tunnel")
 	return
+}
+
+func (p *Proxy) Run() (err error) {
+	go func() {
+		_ = p.ListenTunnel()
+	}()
+	return p.ListenPublic()
 }

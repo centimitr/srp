@@ -15,7 +15,7 @@ func main() {
 
 func proxy(c *Context) {
 	p := NewProxy(c.Get("public"), c.Get("tunnel"))
-	check(p.Start())
+	check(p.Run())
 }
 
 func server(c *Context) {

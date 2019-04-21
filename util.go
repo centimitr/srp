@@ -66,7 +66,6 @@ func ReadHTTPMessage(conn io.Reader) ([]byte, error) {
 		}
 	}
 	if count != 0 {
-		//line, err := r.ReadBytes('\n')
 		body := make([]byte, count)
 		_, err := r.Read(body)
 		if err != nil {

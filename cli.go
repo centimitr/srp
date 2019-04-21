@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -80,7 +79,7 @@ func (app *App) Run() *App {
 		}
 	}
 	if app.execCount == 0 {
-		fmt.Println("no action executed.")
+		println("no action executed.")
 	}
 	return app
 }

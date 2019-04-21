@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/gorilla/websocket"
-	"io"
 	"net"
 )
 
@@ -37,60 +36,39 @@ func (s *Server) CreateService() (err error) {
 	return
 }
 
-//func (s *Server) handleTunnelMessages() {
-//	var wg sync.WaitGroup
-//	wg.Add(2)
-//	go copyTCPBuf(s.Tunnel, s.Conn, &wg)
-//	go copyTCPBuf(s.Conn, s.Tunnel, &wg)
-//	wg.Wait()
-//
-//	//for {
-//	//	//_, _ = io.Copy(s.Conn, s.Tunnel)
-//	//	msg, err := bufio.NewReader(s.Tunnel).ReadString('\n')
-//	//	if check(err) {
-//	//		break
-//	//	}
-//	//	err = s.call(msg)
-//	//	check(err, "call")
-//	//}
-//	// may need to detect if handling stops
-//}
-
-//func (s *Server) ConnectTunnel2() (err error) {
-//	s.Tunnel, err = DialTCPKeepAlive(s.ProxyAddr)
-//	if err != nil {
-//		return
-//	}
-//	go s.handleTunnelMessages()
-//	fmt.Printf("Connected: %s (%s)\n", s.ProxyAddr, s.Tunnel.RemoteAddr())
-//	return
-//}
-
 func (s *Server) ConnectTunnel() (err error) {
 	d := new(websocket.Dialer)
 	s.Tunnel, _, err = d.Dial(s.ProxyAddr, nil)
+	if err != nil {
+		return
+	}
+	log("connect:", s.Tunnel.RemoteAddr())
 	go func() {
 		for {
-			for {
-				messageType, r, err := s.Tunnel.NextReader()
-				check(err)
-				_, err = io.Copy(s.Conn, r)
-				check(err)
-
-				w, err := s.Tunnel.NextWriter(messageType)
-				check(err)
-				_, err = io.Copy(w, s.Conn)
-				check(err)
-				err = w.Close()
-				check(err)
+			log(0)
+			_, req, err := s.Tunnel.ReadMessage()
+			if check(err) {
+				break
 			}
+			log(1)
+			log(1, string(req))
+			_, err = s.Conn.Write(req)
+			if check(err) {
+				break
+			}
+			log(2)
+			resp, err := ReadHTTPMessage(s.Conn)
+			if check(err) {
+				break
+			}
+			log(3)
+			log(3, string(resp))
+			err = s.Tunnel.WriteMessage(websocket.TextMessage, resp)
+			if check(err) {
+				break
+			}
+			log(4)
 		}
 	}()
-	//s.Tunnel, err = DialTCPKeepAlive(s.ProxyAddr)
-	//if err != nil {
-	//	return
-	//}
-	//go s.handleTunnelMessages()
-	//fmt.Printf("Connected: %s (%s)\n", s.ProxyAddr, s.Tunnel.RemoteAddr())
 	return
 }

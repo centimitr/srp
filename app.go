@@ -4,16 +4,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"strings"
 )
-
-func check(err error, prompts ...string) bool {
-	if err != nil {
-		fmt.Println(strings.Join(prompts, ": ")+":", err)
-		return true
-	}
-	return false
-}
 
 func main() {
 	new(App).

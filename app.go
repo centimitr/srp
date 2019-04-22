@@ -14,7 +14,7 @@ func main() {
 
 func proxy(c *Context) {
 	p := NewProxy(c.Get("public"), c.Get("tunnel"))
-	check(p.Run())
+	check(p.Run(), "proxy")
 }
 
 func server(c *Context) {
@@ -22,8 +22,7 @@ func server(c *Context) {
 	serviceAddr := c.Get("service")
 
 	s := NewServer(tunnelAddr, serviceAddr)
-	check(s.CreateService(), "connect.service")
-	check(s.ConnectTunnel(), "connect.tunnel")
+	check(s.Start(), "proxy")
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()

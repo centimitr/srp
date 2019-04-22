@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/gorilla/websocket"
 	"io"
 	"net"
 	"strconv"
@@ -17,7 +18,12 @@ func log(vs ...interface{}) {
 
 func check(err error, prompts ...string) bool {
 	if err != nil {
-		fmt.Println(strings.Join(prompts, ": ")+":", err)
+		prompt := strings.Join(prompts, ": ")
+		if prompt != "" {
+			prompt += ":"
+			fmt.Println(prompt, err)
+		}
+		fmt.Println(err)
 		return true
 	}
 	return false
@@ -37,22 +43,11 @@ func isNotNumber(r rune) bool {
 	return !unicode.IsNumber(r)
 }
 
-//func copyLine(r *bufio.Reader, buf *bytes.Buffer) (err error) {
-//	line, err := r.ReadBytes('\n')
-//	if err != nil {
-//		return
-//	}
-//	buf.Write(line)
-//	return
-//}
-
 func ReadHTTPMessage(conn io.Reader) ([]byte, error) {
 	r := bufio.NewReader(conn)
-	buf := bytes.NewBuffer([]byte{})
-	//readingBody := false
+	buf := new(bytes.Buffer)
 	var count int
 	for {
-		//copyLine(line)
 		line, err := r.ReadBytes('\n')
 		if err != nil {
 			return nil, err
@@ -74,4 +69,13 @@ func ReadHTTPMessage(conn io.Reader) ([]byte, error) {
 		buf.Write(body)
 	}
 	return buf.Bytes(), nil
+}
+
+func ReadWriteWebsocket(conn *websocket.Conn, messageType int, req []byte) (resp []byte, err error) {
+	err = conn.WriteMessage(messageType, req)
+	if err != nil {
+		return
+	}
+	_, resp, err = conn.ReadMessage()
+	return
 }

@@ -9,7 +9,7 @@ type Server struct {
 	ProxyAddr   string
 	ServiceAddr string
 	Tunnel      *websocket.Conn
-	Conn        net.Conn
+	Conn        *net.TCPConn
 	Listener    net.Listener
 }
 
@@ -37,6 +37,9 @@ func (s *Server) ConnectTunnel() (err error) {
 		for {
 			_, req, err := s.Tunnel.ReadMessage()
 			if check(err) {
+				break
+			}
+			if s.Conn == nil {
 				break
 			}
 			_, err = s.Conn.Write(req)

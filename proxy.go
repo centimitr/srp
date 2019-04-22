@@ -16,15 +16,33 @@ func NewProxy(publicAddr, tunnelAddr string) *Proxy {
 	return &Proxy{PublicAddr: publicAddr, TunnelAddr: tunnelAddr}
 }
 
+func (p *Proxy) disconnectTunnel(err error) {
+	if websocket.IsUnexpectedCloseError(err) {
+		if p.Tunnel != nil {
+			log("disconnect:", p.Tunnel.RemoteAddr())
+		}
+		p.Tunnel = nil
+	}
+}
+
 func (p *Proxy) forwardMessages(client net.Conn) {
 	var req, resp []byte
+	var err error
 	for {
-		req, _ = ReadHTTPMessage(client)
-		if p.Tunnel != nil {
-			_ = p.Tunnel.WriteMessage(websocket.TextMessage, req)
-			_, resp, _ = p.Tunnel.ReadMessage()
+		req, err = ReadHTTPMessage(client)
+		if check(err, "forward") {
+			break
 		}
-		_, _ = client.Write(resp)
+		if p.Tunnel == nil {
+			break
+		}
+		resp, err = ReadWriteWebsocket(p.Tunnel, websocket.TextMessage, req)
+		if check(err, "forward") {
+			p.disconnectTunnel(err)
+			break
+		}
+		_, err = client.Write(resp)
+		check(err, "forward")
 	}
 }
 
@@ -36,14 +54,17 @@ func (p *Proxy) ListenPublic() (err error) {
 	}
 	for {
 		conn, err := l.Accept()
-		if !check(err, "public") {
-			go p.forwardMessages(conn)
+		if check(err, "public") {
+			break
 		}
+		go p.forwardMessages(conn)
 	}
+	return
 }
 
 func (p *Proxy) ListenTunnel() (err error) {
 	upgrader := websocket.Upgrader{}
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.NoRoute(func(c *gin.Context) {
 		p.Tunnel, err = upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -51,6 +72,7 @@ func (p *Proxy) ListenTunnel() (err error) {
 			log("connect:", p.Tunnel.RemoteAddr())
 		}
 	})
+	log("tunnel:", p.TunnelAddr)
 	err = r.Run(p.TunnelAddr)
 	check(err, "tunnel")
 	return

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
@@ -26,11 +25,13 @@ func server(c *Context) {
 	check(s.CreateService(), "connect.service")
 	check(s.ConnectTunnel(), "connect.tunnel")
 
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.GET("", func(c *gin.Context) {
 		data := c.Query("x")
 		c.String(http.StatusOK, data)
-		fmt.Println(data)
+		log(data)
 	})
+	log("listen:", s.Listener.Addr())
 	check(http.Serve(s.Listener, r))
 }

@@ -1,4 +1,4 @@
-package main
+package srp
 
 import (
 	"github.com/gorilla/websocket"

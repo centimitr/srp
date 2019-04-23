@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"srp"
 )
 
 func main() {
@@ -13,7 +14,7 @@ func main() {
 }
 
 func proxy(c *Context) {
-	p := NewProxy(c.Get("public"), c.Get("tunnel"))
+	p := srp.NewProxy(c.Get("public"), c.Get("tunnel"))
 	check(p.Run(), "proxy")
 }
 
@@ -21,7 +22,7 @@ func server(c *Context) {
 	tunnelAddr := c.Get("tunnel")
 	serviceAddr := c.Get("service")
 
-	s := NewServer(tunnelAddr, serviceAddr)
+	s := srp.NewServer(tunnelAddr, serviceAddr)
 	check(s.Start(), "proxy")
 
 	gin.SetMode(gin.ReleaseMode)

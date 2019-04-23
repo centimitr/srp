@@ -1,4 +1,4 @@
-module github.com/devbycm/srp
+module srp
 
 go 1.12
 

@@ -6,10 +6,15 @@ import (
 	"srp"
 )
 
+func init() {
+	gin.SetMode(gin.ReleaseMode)
+}
+
 func main() {
 	new(App).
 		Action("proxy :public :tunnel", proxy).
 		Action("server :tunnel :service", server).
+		Action("registry :service", registry).
 		Run()
 }
 
@@ -25,7 +30,6 @@ func server(c *Context) {
 	s := srp.NewServer(tunnelAddr, serviceAddr)
 	check(s.Start(), "proxy")
 
-	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.GET("", func(c *gin.Context) {
 		data := c.Query("x")
@@ -34,4 +38,9 @@ func server(c *Context) {
 	})
 	log("listen:", s.Listener.Addr())
 	check(http.Serve(s.Listener, r))
+}
+
+func registry(c *Context) {
+	r := srp.NewRegistry(c.Get("service"))
+	check(r.Run())
 }

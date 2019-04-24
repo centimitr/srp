@@ -64,7 +64,6 @@ func (p *Proxy) ListenPublic() (err error) {
 
 func (p *Proxy) ListenTunnel() (err error) {
 	upgrader := websocket.Upgrader{}
-	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.NoRoute(func(c *gin.Context) {
 		p.Tunnel, err = upgrader.Upgrade(c.Writer, c.Request, nil)

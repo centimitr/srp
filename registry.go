@@ -2,6 +2,7 @@ package srp
 
 import (
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"sync"
@@ -32,6 +33,14 @@ type MsgRegistry struct {
 	Error   error
 }
 
+type RegistryService struct {
+	Service string
+	Id      string
+	Addr    string
+}
+
+type RegistryServiceList map[string][]RegistryService
+
 // Registry
 type Registry struct {
 	Addr         string
@@ -54,6 +63,7 @@ func (r *Registry) addPushList(conn *websocket.Conn) {
 		r.pushList = make(map[*websocket.Conn]int)
 	}
 	r.pushList[conn] = 0
+	go r.push(conn, 0)
 	r.pushListLock.Unlock()
 }
 
@@ -65,19 +75,24 @@ func (r *Registry) removePushList(conn *websocket.Conn) {
 	r.pushListLock.Unlock()
 }
 
-func (r *Registry) push() {
-	for conn, cnt := range r.pushList {
-		msg := &MsgRegistry{Type: MsgServicePushResp, Services: r.Services}
-		if cnt == -1 {
-			msg.PushEnd = true
-			delete(r.pushList, conn)
-		} else {
-			if cnt == 0 {
-				msg.PushStart = true
-			}
-			r.pushList[conn]++
+func (r *Registry) push(conn *websocket.Conn, times int) {
+	log("push:", conn.RemoteAddr())
+	msg := &MsgRegistry{Type: MsgServicePushResp, Services: r.Services, Success: true}
+	if times == -1 {
+		msg.PushEnd = true
+		delete(r.pushList, conn)
+	} else {
+		if times == 0 {
+			msg.PushStart = true
 		}
-		check(conn.WriteJSON(msg), "push")
+		r.pushList[conn]++
+	}
+	check(conn.WriteJSON(msg), "push")
+}
+
+func (r *Registry) pushAll() {
+	for conn, times := range r.pushList {
+		go r.push(conn, times)
 	}
 }
 
@@ -92,7 +107,7 @@ func (r *Registry) addService(registerMsg MsgRegistry) {
 	}
 	if !exists {
 		r.Services[registerMsg.Service] = append(addrs, registerMsg.Addr)
-		r.push()
+		r.pushAll()
 	}
 	r.servicesLock.Unlock()
 }
@@ -111,8 +126,9 @@ func (r *Registry) removeService(registerMsg MsgRegistry) {
 	r.servicesLock.Unlock()
 }
 
-func (r *Registry) closeConn(conn *websocket.Conn, registerMsg MsgRegistry) bool {
+func (r *Registry) closeConn(conn *websocket.Conn, registerMsg MsgRegistry) {
 	r.removeService(registerMsg)
+	r.removePushList(conn)
 	_ = conn.Close()
 }
 
@@ -186,23 +202,12 @@ func (rr *RemoteRegistry) Connect() (err error) {
 }
 
 func (rr *RemoteRegistry) handleIncomingMsg(msg *MsgRegistry) error {
-	switch msg.Type {
-	case MsgRegisterResp:
-		if !msg.Success {
-			return msg.Error
-		}
-	case MsgServicePushResp:
-		if !msg.Success {
-			return msg.Error
-		}
-		if msg.PushStart {
-			rr.recv.Lock()
-		} else if msg.PushEnd {
-			rr.recv.Unlock()
-		}
-		rr.Services = msg.Services
-	default:
+	fmt.Printf("%+v\n", *msg)
+	if msg.Type != MsgRegisterResp {
 		return errors.New("registry msg type not supported")
+	}
+	if !msg.Success {
+		return msg.Error
 	}
 	return nil
 }
@@ -243,8 +248,43 @@ func (rr *RemoteRegistry) Register(name string) error {
 	return rr.RegisterAddr(name, "")
 }
 
-func (rr *RemoteRegistry) Subscribe(handler func()) error {
-	return rr.call(&MsgRegistry{Type: MsgServicePushReq}, false)
+type SubscribeHandler func(services map[string][]string)
+
+func (h *SubscribeHandler) Handle(services map[string][]string) {
+	if *h != nil {
+		(*h)(services)
+	}
+}
+
+func (rr *RemoteRegistry) Subscribe(handler SubscribeHandler) (err error) {
+	err = rr.call(&MsgRegistry{Type: MsgServicePushReq}, false)
+	if err != nil {
+		return
+	}
+	go func() {
+		var msg MsgRegistry
+		for {
+			err = rr.Conn.ReadJSON(&msg)
+			if check(err) {
+				return
+			}
+			fmt.Printf("%+v\n", msg)
+			if !msg.Success {
+				check(msg.Error)
+				break
+			}
+			if msg.PushStart {
+				rr.recv.Lock()
+			} else if msg.PushEnd {
+				rr.recv.Unlock()
+				break
+			}
+			log("update")
+			rr.Services = msg.Services
+			handler.Handle(msg.Services)
+		}
+	}()
+	return
 }
 
 func (rr *RemoteRegistry) Unsubscribe() error {
@@ -256,4 +296,21 @@ func (rr *RemoteRegistry) Query(name string) (addrs []string) {
 		return
 	}
 	return rr.Services[name]
+}
+
+func (rr *RemoteRegistry) QuickSubscribeByAddr(service string, addr string, handler SubscribeHandler) (err error) {
+	err = rr.Connect()
+	if err != nil {
+		return
+	}
+	err = rr.RegisterAddr(service, addr)
+	if err != nil {
+		return
+	}
+	err = rr.Subscribe(handler)
+	return
+}
+
+func (rr *RemoteRegistry) QuickSubscribe(service string, handler SubscribeHandler) (err error) {
+	return rr.QuickSubscribeByAddr(service, "", handler)
 }

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/devbycm/srp"
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"srp"
 )
 
 func init() {

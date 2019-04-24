@@ -173,6 +173,12 @@ type RemoteRegistry struct {
 	recv         sync.Mutex
 }
 
+func NewRemoteRegistry(addr string) *RemoteRegistry {
+	return &RemoteRegistry{
+		RegistryAddr: addr,
+	}
+}
+
 func (rr *RemoteRegistry) Connect() (err error) {
 	d := new(websocket.Dialer)
 	rr.Conn, _, err = d.Dial(rr.RegistryAddr, nil)

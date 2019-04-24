@@ -181,27 +181,27 @@ func (r *Registry) Run() error {
 	return s.Run(r.Addr)
 }
 
-// RemoteRegistry
-type RemoteRegistry struct {
+// RegistryClient
+type RegistryClient struct {
 	RegistryAddr string
 	Conn         *websocket.Conn
 	Services     map[string][]string
 	recv         sync.Mutex
 }
 
-func NewRemoteRegistry(addr string) *RemoteRegistry {
-	return &RemoteRegistry{
+func NewRegistryClient(addr string) *RegistryClient {
+	return &RegistryClient{
 		RegistryAddr: addr,
 	}
 }
 
-func (rr *RemoteRegistry) Connect() (err error) {
+func (ra *RegistryClient) Connect() (err error) {
 	d := new(websocket.Dialer)
-	rr.Conn, _, err = d.Dial(rr.RegistryAddr, nil)
+	ra.Conn, _, err = d.Dial(ra.RegistryAddr, nil)
 	return
 }
 
-func (rr *RemoteRegistry) handleIncomingMsg(msg *MsgRegistry) error {
+func (ra *RegistryClient) handleIncomingMsg(msg *MsgRegistry) error {
 	fmt.Printf("%+v\n", *msg)
 	if msg.Type != MsgRegisterResp {
 		return errors.New("registry msg type not supported")
@@ -212,40 +212,40 @@ func (rr *RemoteRegistry) handleIncomingMsg(msg *MsgRegistry) error {
 	return nil
 }
 
-func (rr *RemoteRegistry) call(msg *MsgRegistry, requireReply bool) (err error) {
+func (ra *RegistryClient) call(msg *MsgRegistry, requireReply bool) (err error) {
 	if requireReply {
-		rr.recv.Lock()
+		ra.recv.Lock()
 	}
-	err = rr.Conn.WriteJSON(*msg)
+	err = ra.Conn.WriteJSON(*msg)
 	if err != nil {
 		return
 	}
 	if requireReply {
 		var result MsgRegistry
-		err = rr.Conn.ReadJSON(&result)
+		err = ra.Conn.ReadJSON(&result)
 		if err != nil {
 			return
 		}
-		rr.recv.Unlock()
-		return rr.handleIncomingMsg(&result)
+		ra.recv.Unlock()
+		return ra.handleIncomingMsg(&result)
 	}
 	return
 }
 
-func (rr *RemoteRegistry) Disconnect() {
-	if rr.Conn != nil {
-		_ = rr.call(&MsgRegistry{Type: MsgCloseReq}, false)
-		_ = rr.Conn.Close()
-		rr.Conn = nil
+func (ra *RegistryClient) Disconnect() {
+	if ra.Conn != nil {
+		_ = ra.call(&MsgRegistry{Type: MsgCloseReq}, false)
+		_ = ra.Conn.Close()
+		ra.Conn = nil
 	}
 }
 
-func (rr *RemoteRegistry) RegisterAddr(name string, addr string) error {
-	return rr.call(&MsgRegistry{Type: MsgRegisterReq, Service: name, Addr: addr}, true)
+func (ra *RegistryClient) RegisterAddr(name string, addr string) error {
+	return ra.call(&MsgRegistry{Type: MsgRegisterReq, Service: name, Addr: addr}, true)
 }
 
-func (rr *RemoteRegistry) Register(name string) error {
-	return rr.RegisterAddr(name, "")
+func (ra *RegistryClient) Register(name string) error {
+	return ra.RegisterAddr(name, "")
 }
 
 type SubscribeHandler func(services map[string][]string)
@@ -256,15 +256,15 @@ func (h *SubscribeHandler) Handle(services map[string][]string) {
 	}
 }
 
-func (rr *RemoteRegistry) Subscribe(handler SubscribeHandler) (err error) {
-	err = rr.call(&MsgRegistry{Type: MsgServicePushReq}, false)
+func (ra *RegistryClient) Subscribe(handler SubscribeHandler) (err error) {
+	err = ra.call(&MsgRegistry{Type: MsgServicePushReq}, false)
 	if err != nil {
 		return
 	}
 	go func() {
 		var msg MsgRegistry
 		for {
-			err = rr.Conn.ReadJSON(&msg)
+			err = ra.Conn.ReadJSON(&msg)
 			if check(err) {
 				return
 			}
@@ -274,43 +274,43 @@ func (rr *RemoteRegistry) Subscribe(handler SubscribeHandler) (err error) {
 				break
 			}
 			if msg.PushStart {
-				rr.recv.Lock()
+				ra.recv.Lock()
 			} else if msg.PushEnd {
-				rr.recv.Unlock()
+				ra.recv.Unlock()
 				break
 			}
 			log("update")
-			rr.Services = msg.Services
+			ra.Services = msg.Services
 			handler.Handle(msg.Services)
 		}
 	}()
 	return
 }
 
-func (rr *RemoteRegistry) Unsubscribe() error {
-	return rr.call(&MsgRegistry{Type: MsgServicePushCancelReq}, false)
+func (ra *RegistryClient) Unsubscribe() error {
+	return ra.call(&MsgRegistry{Type: MsgServicePushCancelReq}, false)
 }
 
-func (rr *RemoteRegistry) Query(name string) (addrs []string) {
-	if rr.Services == nil {
+func (ra *RegistryClient) Query(name string) (addrs []string) {
+	if ra.Services == nil {
 		return
 	}
-	return rr.Services[name]
+	return ra.Services[name]
 }
 
-func (rr *RemoteRegistry) QuickSubscribeByAddr(service string, addr string, handler SubscribeHandler) (err error) {
-	err = rr.Connect()
+func (ra *RegistryClient) QuickSubscribeByAddr(service string, addr string, handler SubscribeHandler) (err error) {
+	err = ra.Connect()
 	if err != nil {
 		return
 	}
-	err = rr.RegisterAddr(service, addr)
+	err = ra.RegisterAddr(service, addr)
 	if err != nil {
 		return
 	}
-	err = rr.Subscribe(handler)
+	err = ra.Subscribe(handler)
 	return
 }
 
-func (rr *RemoteRegistry) QuickSubscribe(service string, handler SubscribeHandler) (err error) {
-	return rr.QuickSubscribeByAddr(service, "", handler)
+func (ra *RegistryClient) QuickSubscribe(service string, handler SubscribeHandler) (err error) {
+	return ra.QuickSubscribeByAddr(service, "", handler)
 }

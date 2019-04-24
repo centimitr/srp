@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/devbycm/scli"
 	"github.com/devbycm/srp"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -11,19 +12,18 @@ func init() {
 }
 
 func main() {
-	new(App).
+	new(scli.App).
 		Action("proxy :public :tunnel", proxy).
 		Action("server :tunnel :service", server).
-		Action("registry :service", registry).
 		Run()
 }
 
-func proxy(c *Context) {
+func proxy(c *scli.Context) {
 	p := srp.NewProxy(c.Get("public"), c.Get("tunnel"))
 	check(p.Run(), "proxy")
 }
 
-func server(c *Context) {
+func server(c *scli.Context) {
 	tunnelAddr := c.Get("tunnel")
 	serviceAddr := c.Get("service")
 
@@ -38,9 +38,4 @@ func server(c *Context) {
 	})
 	log("listen:", s.Listener.Addr())
 	check(http.Serve(s.Listener, r))
-}
-
-func registry(c *Context) {
-	r := srp.NewRegistry(c.Get("service"))
-	check(r.Run())
 }
